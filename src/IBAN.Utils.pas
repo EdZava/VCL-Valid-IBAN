@@ -8,8 +8,11 @@ uses
 type
   TIBANUtils = class
   public
-    class function GetIBAN(inSiglaPais, inCCC: string): string; // Genera un IBAN para una CCC. EJ: "ES17"
-    class function IsValidIBAN(inFull: String; Errores: TStringList=nil): Boolean; // Valida un IBAN (Generico todos los paises SEPA)
+    // Genera un IBAN para una CCC. EJ: "ES17"
+    class function GetIBAN(inSiglaPais, inCCC: string): string;
+
+    // Valida un IBAN (Generico todos los paises UE)
+    class function IsValidIBAN(inFull: String; Errores: TStringList=nil): Boolean;
   end;
 
 implementation
@@ -18,7 +21,7 @@ uses
   System.SysUtils,
   IBAN.Types;
 
-  { TIBANUtils }
+{ TIBANUtils }
 
 class function TIBANUtils.GetIBAN(inSiglaPais, inCCC: string): string;
 var
