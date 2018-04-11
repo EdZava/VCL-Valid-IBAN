@@ -8,10 +8,15 @@ uses
 type
   {$REGION 'Doc'}
   /////////////////////////////////////////////////////////////////////////////////
-  // Ref:
-  //    https://es.wikipedia.org/wiki/International_Bank_Account_Number
-  //    http://www.lasexta.com/tecnologia-tecnoxplora/ciencia/divulgacion/iban-asi-calculan-numeros-cuenta-bancaria_2014020957fca03d0cf2fd8cc6b0e1a2.html
-  //    http://www.neleste.com/validar-ccc-con-php/
+  // Doc IBAN:
+  //	   https://es.wikipedia.org/wiki/International_Bank_Account_Number
+  //	   http://www.lasexta.com/tecnologia-tecnoxplora/ciencia/divulgacion/iban-asi-calculan-numeros-cuenta-bancaria_2014020957fca03d0cf2fd8cc6b0e1a2.html
+  //
+  // Ejemplos de IBAN:
+  //	   https://www.iban.es/ejemplos.html
+  //
+  // Validador IBAN Online:
+  //	   http://es.ibancalculator.com/iban_validieren.html
   /////////////////////////////////////////////////////////////////////////////////
   //    IBAN Completo.: ES1720852066623456789011
   //    IBAN Deglosado: ES17 + 2085    + 2066    + 62 + 34 5678 9011
@@ -44,8 +49,9 @@ type
     function ToFormatPapel: string;
     function ToFormatElect: string;
 
-    procedure Build(inIBAN, inCCC: string); overload;
-    procedure Build(inFull: string); overload;
+    constructor Build(inIBAN, inCCC: string); overload;
+    constructor Build(inFull: string); overload;
+    constructor BuildESP(inIBAN, inEntidad, inOficina, inDC, inCuenta: string);
   end;
 
   { Info Bancaria del Codigo del Pais, IBAN = "International Bank Account Number" }
@@ -55,6 +61,7 @@ type
     function ToIBAN_Table: string;
     function GetStrAValidar(inCCC: string): string;
 
+    function IsValid_Pais(inPais: string): Boolean;
     function IsValid_DC(inCCC: String; Errores: TStringList=nil): Boolean;
     function IsValid_Base(Errores: TStringList=nil): Boolean;
   public
@@ -64,9 +71,9 @@ type
     // HELPERs
     function ToIBAN: string;
 
-    function Build(inPais, inDC: string): TrBancoIBANInfo; overload;
-    function Build(inIBAN: string): TrBancoIBANInfo; overload;
-    function BuildEmpty(inPais: string): TrBancoIBANInfo;
+    constructor Build(inPais, inDC: string); overload;
+    constructor Build(inIBAN: string); overload;
+    constructor BuildEmpty(inPais: string); overload;
 
     function GetDigitoControl(inCCC: string): string;
     function IsValid(inCCC: String; Errores: TStringList=nil): Boolean;
@@ -82,8 +89,8 @@ type
 
     // HELPERs
     function ToCCC(Sep:string=''): string;
-    function Build(inEntidad, inOficina, inDC, inCuenta: string): TrBancoCCCInfoESP; overload;
-    function Build(inCCC: string): TrBancoCCCInfoESP; overload;
+    constructor Build(inEntidad, inOficina, inDC, inCuenta: string); overload;
+    constructor Build(inCCC: string); overload;
   end;
 
 implementation
@@ -144,13 +151,13 @@ begin
   Result := Self.AddPrefixPapelIBAN( Self.ToFull(' ') );
 end;
 
-procedure TrBancoCuentaInfo.Build(inIBAN, inCCC: string);
+constructor TrBancoCuentaInfo.Build(inIBAN, inCCC: string);
 begin
   Self.IBAN := inIBAN;
   Self.CCC  := inCCC;
 end;
 
-procedure TrBancoCuentaInfo.Build(inFull: string);
+constructor TrBancoCuentaInfo.Build(inFull: string);
 var
   Value: string;
 begin
@@ -162,6 +169,14 @@ begin
   // Separa
   Self.IBAN := Copy(Value, 1, 4);
   Self.CCC  := Copy(Value, 5, Length(Value)); //El restante es el CCC
+end;
+
+constructor TrBancoCuentaInfo.BuildESP(inIBAN, inEntidad, inOficina, inDC, inCuenta: string);
+var
+  CCCFull: string;
+begin
+  CCCFull := TrBancoCCCInfoESP.Build(inEntidad, inOficina, inDC, inCuenta).ToCCC;
+  Self.Build(inIBAN, CCCFull);
 end;
 
 { TrBancoIBANInfo }
@@ -211,28 +226,22 @@ begin
   Result := Self.PaisToIBANTable(Self.Pais) + Self.DC;
 end;
 
-function TrBancoIBANInfo.Build(inPais, inDC: string): TrBancoIBANInfo;
+constructor TrBancoIBANInfo.Build(inPais, inDC: string);
 begin
-  Result := Self;
-
   Self.Pais := inPais;
   Self.DC   := inDC;
 end;
 
-function TrBancoIBANInfo.Build(inIBAN: string): TrBancoIBANInfo;
+constructor TrBancoIBANInfo.Build(inIBAN: string);
 begin
   // Ej: "ES78"
-  Result := Self;
-
   inIBAN := Trim(inIBAN);
   Self.Pais := Copy(inIBAN, 1, 2);
   Self.DC   := Copy(inIBAN, 3, 4);
 end;
 
-function TrBancoIBANInfo.BuildEmpty(inPais: string): TrBancoIBANInfo;
+constructor TrBancoIBANInfo.BuildEmpty(inPais: string);
 begin
-  Result := Self;
-
   Self.Pais := inPais;
   Self.DC   := '00';
 end;
@@ -295,17 +304,39 @@ begin
      TIBANFuncs.AddNotNil(IBANInvalidoStr, Errores);
 end;
 
+function TrBancoIBANInfo.IsValid_Pais(inPais: string): Boolean;
+
+  function IsStringOnly(Caracter: Char): Boolean;
+  begin
+     Result := CharInSet(Caracter, ['A'..'Z']) or
+               CharInSet(Caracter, ['a'..'z']);
+  end;
+
+var
+  i: Integer;
+begin
+  Result := True;
+  for i:=1 to Length(inPais) do
+  begin
+     if not IsStringOnly(inPais[i]) then
+     begin
+        Result := False;
+        Break;
+     end;
+  end;
+end;
+
 function TrBancoIBANInfo.IsValid_Base(Errores: TStringList=nil): Boolean;
 begin
   Result := True;
 
-  if (Self.Pais.IsEmpty) or (Self.Pais.Length < 2) then
+  if (Self.Pais.IsEmpty) or (Self.Pais.Length < 2) or (not Self.IsValid_Pais(Self.Pais)) then // Tiene que ser solo letras
   begin
      TIBANFuncs.AddNotNil(PaisIBANInvalidoStr, Errores);
      Result := False;
   end;
 
-  if (Self.DC.IsEmpty) or (Self.DC.Length < 2) or (StrToIntDef(Self.DC, -1) = -1) then
+  if (Self.DC.IsEmpty) or (Self.DC.Length < 2) or (StrToIntDef(Self.DC, -1) = -1) then //Tiene que ser Integer
   begin
      TIBANFuncs.AddNotNil(DcIBANInvalidoStr, Errores);
      Result := False;
@@ -335,7 +366,7 @@ begin
             Self.Cuenta;
 end;
 
-function TrBancoCCCInfoESP.Build(inEntidad, inOficina, inDC, inCuenta: string): TrBancoCCCInfoESP;
+constructor TrBancoCCCInfoESP.Build(inEntidad, inOficina, inDC, inCuenta: string);
 begin
   Self.Entidad := inEntidad;
   Self.Oficina := inOficina;
@@ -343,7 +374,7 @@ begin
   Self.Cuenta  := inCuenta;
 end;
 
-function TrBancoCCCInfoESP.Build(inCCC: string): TrBancoCCCInfoESP;
+constructor TrBancoCCCInfoESP.Build(inCCC: string);
 var
   Value: string;
 begin
